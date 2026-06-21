@@ -2,7 +2,7 @@
 
 ## Identidad del repositorio
 
-Sistema de inteligencia orientada al usuario final de Uply. Responsable de career coaching, diagnóstico profesional, skill gap analysis, recomendación de cursos, simulación de entrevistas, optimización de CV, aprendizaje de inglés y predicción de empleabilidad. Es consumido **exclusivamente** por `uply-backend` — nunca directamente desde el frontend.
+Sistema de inteligencia orientada al usuario final de Uply. Responsable de career coaching, diagnóstico profesional, skill gap analysis, recomendación de cursos, simulación de entrevistas, sugerencias de perfil/CV, aprendizaje de inglés y predicción de empleabilidad. Es consumido **exclusivamente** por `uply-backend` — nunca directamente desde el frontend.
 
 ---
 
@@ -18,6 +18,8 @@ Sistema de inteligencia orientada al usuario final de Uply. Responsable de caree
 | Orquestación LLM | LangChain | 0.3.x |
 | Abstracción LLM | LiteLLM | latest |
 | LLM (desarrollo) | Ollama — llama3.2:3b o gemma2:2b | local, gratis |
+| LLM (producción) | Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) | Anthropic API |
+| LLM (fallback prod) | Groq `llama-3.1-8b-instant` | gratis |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | local, gratis |
 | Búsqueda vectorial | pgvector (extensión de PostgreSQL) | — |
 | Validación | Pydantic v2 | 2.x |
@@ -25,38 +27,46 @@ Sistema de inteligencia orientada al usuario final de Uply. Responsable de caree
 | Linting | Ruff | latest |
 | Gestión de dependencias | uv | latest |
 
-**Todos gratuitos. Los LLMs corren localmente con Ollama, sin costo de API.**
-
 ---
 
-## Arquitectura de IA — sin costo
+## Estrategia de LLM por entorno
 
-### LLMs con Ollama (gratis, local)
+| Entorno | Modelo | Costo |
+|---------|--------|-------|
+| Desarrollo local | `ollama/llama3.2:3b` | Gratis |
+| PC 8GB RAM | `ollama/gemma2:2b` | Gratis (más liviano) |
+| Producción | `claude-haiku-4-5-20251001` | ~$0.00036/sesión |
+| Fallback producción | `groq/llama-3.1-8b-instant` | Gratis |
+
+**Por qué Haiku en producción:** contexto de 200K tokens (ideal para sesiones largas de entrevistas), calidad muy superior a modelos gratuitos, costo insignificante hasta miles de usuarios.
+
+El proveedor nunca está hardcodeado — se configura via `.env`:
+
+```python
+from litellm import completion
+
+response = completion(
+    model=settings.LLM_MODEL,
+    fallbacks=["groq/llama-3.1-8b-instant"],   # fallback automático si Anthropic falla
+    messages=[{"role": "user", "content": prompt}],
+    api_base=settings.LLM_BASE_URL,             # None en prod (LiteLLM lo resuelve)
+    stream=True,                                  # Siempre usar streaming en endpoints conversacionales
+)
+```
+
+### LLMs con Ollama (desarrollo)
 
 ```bash
 # Instalar Ollama (Linux)
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Descargar modelo según RAM disponible
-ollama pull llama3.2:3b     # ~2GB RAM — recomendado
-ollama pull gemma2:2b       # ~1.5GB RAM — más liviano
+ollama pull llama3.2:3b     # ~2GB RAM — recomendado (notebook 16GB)
+ollama pull gemma2:2b       # ~1.5GB RAM — PC fija 8GB
 
 # Verificar que corre
 ollama list
 ollama run llama3.2:3b "Hola"
-```
-
-El código nunca tiene el proveedor hardcodeado — se configura via `.env`:
-
-```python
-# LiteLLM es agnóstico al proveedor
-from litellm import completion
-
-response = completion(
-    model=settings.LLM_MODEL,       # "ollama/llama3.2:3b" en dev
-    messages=[{"role": "user", "content": prompt}],
-    api_base=settings.LLM_BASE_URL  # "http://localhost:11434" para Ollama
-)
 ```
 
 ### Embeddings con sentence-transformers (gratis, local)
@@ -86,13 +96,13 @@ uply-client-ai/
 │   ├── api/
 │   │   └── v1/
 │   │       ├── router.py           # Router principal v1
-│   │       ├── coaching/           # Career coaching y orientación
+│   │       ├── coaching/           # Career coaching y orientación (SSE)
 │   │       ├── diagnosis/          # Diagnóstico inicial de perfil
 │   │       ├── skills/             # Skill gap analysis
 │   │       ├── courses/            # Recomendación de cursos
-│   │       ├── interviews/         # Simulación de entrevistas
-│   │       ├── resume/             # Optimización y generación de CV
-│   │       ├── english/            # Aprendizaje de inglés contextual
+│   │       ├── interviews/         # Simulación de entrevistas (SSE)
+│   │       ├── resume/             # Sugerencias de perfil (NO genera archivos)
+│   │       ├── english/            # Aprendizaje de inglés contextual (SSE)
 │   │       └── employability/      # Predicción de empleabilidad
 │   ├── core/
 │   │   ├── llm/                    # Wrappers de LiteLLM y chains de LangChain
@@ -147,6 +157,25 @@ uv run ruff format .
 
 ---
 
+## Entorno de desarrollo — Docker Compose
+
+El entorno completo se levanta desde el repositorio `uply-devops`:
+
+```bash
+# Levantar todos los servicios (ejecutar desde uply-devops/)
+docker compose up -d
+
+# Levantar solo infraestructura
+docker compose up postgres redis ollama -d
+
+# Este servicio corre en el contenedor:
+#   uply-client-ai (FastAPI) → puerto 8001
+```
+
+**PC con 8GB RAM:** usar `gemma2:2b` en lugar de `llama3.2:3b` para Ollama.
+
+---
+
 ## Variables de entorno
 
 Crear `.env` en la raíz (nunca commitear):
@@ -162,9 +191,16 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/uply_client_a
 # Redis
 REDIS_URL=redis://localhost:6379/1
 
-# LLM — Ollama local (gratis)
+# LLM — desarrollo (Ollama local, gratis)
 LLM_MODEL=ollama/llama3.2:3b
 LLM_BASE_URL=http://localhost:11434
+ANTHROPIC_API_KEY=                    # vacío en desarrollo
+
+# LLM — producción (descomentar en prod)
+# LLM_MODEL=claude-haiku-4-5-20251001
+# LLM_BASE_URL=https://api.anthropic.com
+# ANTHROPIC_API_KEY=sk-ant-...
+# GROQ_API_KEY=gsk_...               # fallback
 
 # Embeddings — local con sentence-transformers (gratis)
 EMBEDDING_MODEL=all-MiniLM-L6-v2
@@ -174,16 +210,65 @@ EMBEDDING_DIMENSION=384
 INTERNAL_API_KEY=internal-secret-key-dev
 ```
 
-### Alternativas gratuitas para LLM (si Ollama no está disponible)
+---
 
-```env
-# Groq — free tier: 14.400 requests/día
-LLM_MODEL=groq/llama-3.1-8b-instant
-GROQ_API_KEY=gsk_...
+## Streaming SSE — endpoints conversacionales
 
-# Google Gemini — free tier: 1.500 requests/día
-LLM_MODEL=gemini/gemini-1.5-flash
-GEMINI_API_KEY=AIza...
+Los endpoints de coaching, entrevistas e inglés deben devolver respuestas en streaming usando `StreamingResponse` de FastAPI con LiteLLM `streaming=True`.
+
+```python
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from litellm import completion
+
+@router.post("/coaching/session")
+async def stream_coaching_session(request: CoachingRequest):
+    async def generate():
+        response = completion(
+            model=settings.LLM_MODEL,
+            fallbacks=["groq/llama-3.1-8b-instant"],
+            messages=build_messages(request),
+            stream=True,
+        )
+        for chunk in response:
+            content = chunk.choices[0].delta.content or ""
+            if content:
+                yield f"data: {content}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+```
+
+**Endpoints que usan streaming:**
+- `POST /v1/coaching/session`
+- `POST /v1/interviews/simulate`
+- `POST /v1/english/session`
+
+---
+
+## Módulo de sugerencias de perfil — `/v1/resume/suggestions`
+
+**No existe generación ni descarga de archivos de CV.**
+
+El endpoint recibe el perfil del usuario en JSON (serializado por el backend) y devuelve sugerencias de qué campos completar o mejorar:
+
+```python
+@router.post("/resume/suggestions", response_model=ResumeSuggestionsResponse)
+async def get_resume_suggestions(request: ResumeProfileRequest):
+    # request.profile contiene el JSON estructurado del perfil
+    # Devuelve sugerencias de campos a completar, NO genera ningún archivo
+    ...
+```
+
+Schema de entrada (igual al que usa el backend para serializar perfiles):
+```python
+class ResumeProfileRequest(BaseModel):
+    user_id: str
+    basics: dict       # nombre, titulo, email
+    experiencia: list
+    educacion: list
+    skills: list[str]
+    idiomas: list
 ```
 
 ---
@@ -245,6 +330,19 @@ Request del usuario →
 
 ---
 
+## Deployment — DigitalOcean Droplet
+
+- **Plataforma:** DigitalOcean Droplet — 4 vCPU / 8GB RAM / 160GB SSD (compartido)
+- **Costo estimado:** ~$24/mes total del Droplet (con backend y enterprise-ai)
+- En producción corre el mismo `docker-compose.yml` de `uply-devops`
+
+**Requerimientos para deployment:**
+- `Dockerfile` en la raíz del repositorio
+- Health check endpoint: `GET /health`
+- Logs a stdout (no a archivos)
+
+---
+
 ## Protocolo de sesión para el agente
 
 **Al inicio de cada sesión:**
@@ -260,6 +358,7 @@ Request del usuario →
 
 **Al finalizar la sesión:**
 - Commitear y abrir PR hacia `main`
+- **Los PRs NO se mergean directamente** — se abren y el agente MAIN los revisa y mergea en su sesión posterior
 - Anotar en Google Docs "Uply" → sección **"Pendientes Client AI"**:
   - Capacidades implementadas o mejoradas
   - Endpoints disponibles
@@ -289,7 +388,7 @@ Request del usuario →
 > # 5. Configurar SQLAlchemy async + pgvector
 > # 6. Configurar Alembic
 > # 7. Implementar health check endpoint
-> # 8. Implementar primera capacidad: diagnóstico de perfil profesional
+> # 8. Implementar primera capacidad: diagnóstico de perfil profesional (con streaming)
 > ```
 
 ---
@@ -301,3 +400,4 @@ Request del usuario →
 | `uply-backend` | Único cliente autorizado. Valida requests con header `x-internal-api-key` |
 | `uply-enterprise-ai` | Independiente. No se llaman entre sí |
 | `uply` (frontend) | No llama a este servicio directamente |
+| `uply-devops` | Docker Compose centralizado — levantar desde ahí |
