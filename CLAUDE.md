@@ -394,25 +394,42 @@ Request del usuario →
 
 ## Protocolo de sesión para el agente
 
+> ⚠️ **Limitación de sesiones cloud:** No ejecutar `alembic upgrade head`, tests de integración ni `uv run fastapi dev` — requieren base de datos y servicios corriendo. Ejecutar esos pasos localmente después de hacer pull de `develop`.
+
 **Al inicio de cada sesión:**
 1. Leer este `CLAUDE.md` completo
-2. Leer el `README.md` de este repositorio — el agente MAIN deja allí las instrucciones y prioridades para esta sesión
-3. Ejecutar `git log --oneline -10`
-4. Si el repositorio está vacío → ejecutar el scaffolding (ver Estado actual)
+2. Posicionarse en la rama `develop`:
+   ```bash
+   git checkout develop 2>/dev/null || git checkout -b develop
+   git pull origin develop 2>/dev/null || true
+   ```
+3. Leer las instrucciones del agente MAIN:
+   ```bash
+   git show origin/main:README.md 2>/dev/null || cat README.md
+   ```
+4. Ejecutar `git log --oneline -10`
+5. Si el repositorio está vacío → ejecutar el scaffolding (ver Estado actual)
 
 **Durante la sesión:**
 - TDD obligatorio — test primero, siempre
-- Un PR por capacidad de IA implementada o mejorada
-- Formato de PR: `[CLIENT-AI] descripción breve`
+- Trabajar siempre en la rama `develop` — nunca commitear directamente en `main`
+- Commits atómicos con conventional commits: `feat:`, `fix:`, `test:`, `refactor:`
 
 **Al finalizar la sesión:**
-- Commitear y abrir PR hacia `main`
-- **Los PRs NO se mergean directamente** — se abren y el agente MAIN los revisa y mergea en su sesión posterior
-- Actualizar el `README.md` de este repositorio con el resumen de la sesión:
-  - Capacidades implementadas o mejoradas
-  - Endpoints disponibles
-  - Calidad observada de las respuestas del LLM
-  - Qué queda pendiente
+- Commitear todo en `develop` y hacer push:
+  ```bash
+  git add .
+  git commit -m "feat: descripción de la capacidad implementada"
+  git push origin develop
+  ```
+- **NO abrir PRs** — el agente MAIN es el único que crea PRs de `develop` → `main`
+- Actualizar el `README.md` en `develop` con el resumen de la sesión y hacer push:
+  ```bash
+  # editar README.md con: capacidades implementadas, endpoints, calidad LLM, pendientes
+  git add README.md
+  git commit -m "docs: session summary"
+  git push origin develop
+  ```
 
 ---
 
