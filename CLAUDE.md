@@ -246,21 +246,22 @@ async def stream_coaching_session(request: CoachingRequest):
 
 ---
 
-## Módulo de sugerencias de perfil — `/v1/resume/suggestions`
+## Módulo de diseño de CV — `/v1/resume/curate`
 
 **No existe generación ni descarga de archivos de CV.**
 
-El endpoint recibe el perfil del usuario en JSON (serializado por el backend) y devuelve sugerencias de qué campos completar o mejorar:
+Este módulo es responsable de **diseñar el contenido del CV de cada usuario individualmente**. El AI no solo sugiere — decide activamente qué secciones incluir, qué contenido agregar, qué eliminar y cómo estructurar el perfil para maximizar la empleabilidad del usuario. El template visual es el mismo para todos, pero el contenido varía por usuario según lo que el modelo decide.
 
 ```python
-@router.post("/resume/suggestions", response_model=ResumeSuggestionsResponse)
-async def get_resume_suggestions(request: ResumeProfileRequest):
-    # request.profile contiene el JSON estructurado del perfil
-    # Devuelve sugerencias de campos a completar, NO genera ningún archivo
+@router.post("/resume/curate", response_model=ResumeCuratedResponse)
+async def curate_resume(request: ResumeProfileRequest):
+    # Analiza el perfil raw del usuario
+    # Decide qué agregar, qué eliminar, qué destacar
+    # Devuelve el perfil curado con instrucciones de qué aplicar
     ...
 ```
 
-Schema de entrada (igual al que usa el backend para serializar perfiles):
+Schema de entrada:
 ```python
 class ResumeProfileRequest(BaseModel):
     user_id: str
@@ -269,7 +270,55 @@ class ResumeProfileRequest(BaseModel):
     educacion: list
     skills: list[str]
     idiomas: list
+    objetivo_profesional: str | None   # qué busca el usuario
 ```
+
+Schema de salida (el backend aplica estos cambios a las tablas del perfil):
+```python
+class ResumeCuratedResponse(BaseModel):
+    user_id: str
+    secciones_a_incluir: list[str]       # qué secciones mostrar en el CV
+    secciones_a_excluir: list[str]       # qué secciones omitir
+    contenido_sugerido: dict             # texto mejorado por sección
+    skills_a_destacar: list[str]         # skills más relevantes para el objetivo
+    titulo_profesional_sugerido: str     # headline del CV curado por IA
+    explanation: list[str]               # por qué se tomaron estas decisiones
+```
+
+**Nota:** El endpoint anterior `/v1/resume/suggestions` queda reemplazado por `/v1/resume/curate`. La diferencia es que curate devuelve decisiones estructuradas listas para aplicar, no solo sugerencias.
+
+---
+
+## Módulo de vinculación de empleos — `/v1/jobs/recommendations`
+
+`client-ai` también es responsable de la **vinculación de empleos desde el lado del candidato**: encuentra y recomienda vacantes relevantes para el usuario basándose en su perfil curado y objetivos profesionales.
+
+```python
+@router.post("/jobs/recommendations", response_model=JobRecommendationsResponse)
+async def recommend_jobs(request: JobRecommendationRequest):
+    # Analiza el perfil curado del usuario
+    # Busca vacantes afines vía embeddings (pgvector)
+    # Rankea y explica por qué cada vacante es relevante
+    ...
+
+class JobRecommendationRequest(BaseModel):
+    user_id: str
+    profile: ProfileForAI    # perfil serializado por el backend
+    vacantes_disponibles: list[dict]   # vacantes activas del backend
+
+class JobRecommendationsResponse(BaseModel):
+    user_id: str
+    recomendaciones: list[JobRecommendation]
+
+class JobRecommendation(BaseModel):
+    job_id: str
+    score: float             # 0.0 a 1.0
+    explanation: list[str]   # por qué esta vacante es relevante para el usuario
+    skills_match: list[str]  # skills del usuario que hacen match
+    skills_gap: list[str]    # skills que le faltan para esta vacante
+```
+
+**Diferencia con enterprise-ai:** `client-ai` recomienda vacantes **para un candidato** (perspectiva del candidato). `enterprise-ai` rankea candidatos **para una vacante** (perspectiva de la empresa). Son dos flujos complementarios.
 
 ---
 
@@ -347,8 +396,8 @@ Request del usuario →
 
 **Al inicio de cada sesión:**
 1. Leer este `CLAUDE.md` completo
-2. Ejecutar `git log --oneline -10`
-3. Abrir el Google Docs "Uply" y leer la sección **"Pendientes Client AI"**
+2. Leer el `README.md` de este repositorio — el agente MAIN deja allí las instrucciones y prioridades para esta sesión
+3. Ejecutar `git log --oneline -10`
 4. Si el repositorio está vacío → ejecutar el scaffolding (ver Estado actual)
 
 **Durante la sesión:**
@@ -359,7 +408,7 @@ Request del usuario →
 **Al finalizar la sesión:**
 - Commitear y abrir PR hacia `main`
 - **Los PRs NO se mergean directamente** — se abren y el agente MAIN los revisa y mergea en su sesión posterior
-- Anotar en Google Docs "Uply" → sección **"Pendientes Client AI"**:
+- Actualizar el `README.md` de este repositorio con el resumen de la sesión:
   - Capacidades implementadas o mejoradas
   - Endpoints disponibles
   - Calidad observada de las respuestas del LLM
