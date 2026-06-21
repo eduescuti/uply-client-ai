@@ -436,8 +436,12 @@ Request del usuario →
 > # 4. Configurar FastAPI con middleware de autenticación interna
 > # 5. Configurar SQLAlchemy async + pgvector
 > # 6. Configurar Alembic
-> # 7. Implementar health check endpoint
-> # 8. Implementar primera capacidad: diagnóstico de perfil profesional (con streaming)
+> # 7. IMPORTANTE — primera migración debe habilitar pgvector:
+> #    En alembic/env.py o en la primera migración generada, agregar:
+> #    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+> #    Esto es necesario antes de crear columnas de tipo Vector()
+> # 8. Implementar health check endpoint
+> # 9. Implementar primera capacidad: diagnóstico de perfil profesional
 > ```
 
 ---
