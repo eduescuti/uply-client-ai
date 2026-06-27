@@ -403,12 +403,19 @@ Request del usuario →
    git checkout develop 2>/dev/null || git checkout -b develop
    git pull origin develop 2>/dev/null || true
    ```
-3. Leer las instrucciones del agente MAIN:
+3. Leer las instrucciones del agente MAIN (README.md de develop):
    ```bash
-   git show origin/main:README.md 2>/dev/null || cat README.md
+   git show origin/develop:README.md 2>/dev/null || cat README.md
    ```
-4. Ejecutar `git log --oneline -10`
-5. Si el repositorio está vacío → ejecutar el scaffolding (ver Estado actual)
+4. **Leer documentación de referencia del proyecto** (obligatorio):
+   ```bash
+   git clone https://github.com/eduescuti/uply-devops /tmp/uply-devops 2>/dev/null || git -C /tmp/uply-devops pull --ff-only 2>/dev/null || true
+   cat /tmp/uply-devops/ARQUITECTURA_INTEGRACION.md
+   cat /tmp/uply-devops/DESARROLLO_ROADMAP.md
+   cat /tmp/uply-devops/TROUBLESHOOTING.md
+   ```
+5. Ejecutar `git log --oneline -10`
+6. Si el repositorio está vacío → ejecutar el scaffolding (ver Estado actual)
 
 **Durante la sesión:**
 - TDD obligatorio — test primero, siempre
@@ -423,9 +430,11 @@ Request del usuario →
   git push origin develop
   ```
 - **NO abrir PRs** — el agente MAIN es el único que crea PRs de `develop` → `main`
-- Actualizar el `README.md` en `develop` con el resumen de la sesión y hacer push:
+- Actualizar **únicamente la sección `## 📝 Última sesión`** del `README.md` en `develop`:
   ```bash
-  # editar README.md con: capacidades implementadas, endpoints, calidad LLM, pendientes
+  # IMPORTANTE: editar SOLO la sección "## 📝 Última sesión" del README.md
+  # NUNCA modificar la sección "## 📋 Instrucciones MAIN" — esa sección es del agente MAIN
+  # Incluir en tu sección: capacidades implementadas, endpoints, calidad LLM, pendientes
   git add README.md
   git commit -m "docs: session summary"
   git push origin develop
