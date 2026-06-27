@@ -19,14 +19,17 @@ Consumido exclusivamente por `uply-backend`. Nunca llamado directamente desde el
 ### 🎯 Responsabilidad
 Construir la inteligencia que acompaña a cada candidato. Eres responsable del coaching profesional, análisis de CV, recomendaciones de empleos y predicción de empleabilidad.
 
-### ⚠️ BLOQUEADO POR
-**Espera a que la infraestructura esté corriendo Y que el Backend esté listo.** Necesitas:
-- PostgreSQL corriendo en `localhost:5432` con la base de datos `uply_client_ai_dev` creada
-- Redis corriendo en `localhost:6379`
-- Ollama corriendo en `localhost:11434` con modelo descargado
-- Backend respondiendo en `http://localhost:4000/health`
+### ℹ️ Dependencias por etapa
 
-**El agente MAIN actualiza este README cuando es momento de iniciar.** Hasta entonces, puedes preparar el scaffolding de código y estructura de directorios, pero NO ejecutar migraciones ni levantar el servidor.
+**✅ FASE 1 — SCAFFOLDING (sin infra, comenzar ahora):**
+Escribir todo el código, configurar SQLAlchemy models, Alembic, endpoints, tests unitarios con LLM mocked. NO ejecutar `alembic upgrade head` ni `uv run fastapi dev` — esos requieren PostgreSQL, Redis y Ollama corriendo localmente.
+
+**⏳ FASE 2 — INTEGRACIÓN (requiere infra + backend listo):**
+- `alembic upgrade head` — requiere PostgreSQL en localhost:5432
+- `uv run fastapi dev` — requiere PostgreSQL + Redis + Ollama
+- Tests de integración — requieren infra completa + Backend respondiendo en localhost:4000
+
+El agente MAIN confirma en este README el estado de avance. La infra Docker es responsabilidad del developer humano (MAIN es un agente cloud sin acceso a Docker).
 
 ### 🚀 Prioridad Fase 1 (Orden estricto)
 
