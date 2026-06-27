@@ -320,6 +320,9 @@ class JobRecommendation(BaseModel):
 
 **Diferencia con enterprise-ai:** `client-ai` recomienda vacantes **para un candidato** (perspectiva del candidato). `enterprise-ai` rankea candidatos **para una vacante** (perspectiva de la empresa). Son dos flujos complementarios.
 
+**Sobre los scores — importante:**
+El `score` que devuelve este servicio responde "¿qué tan buena es esta vacante **para este candidato**?". No es el mismo score que devuelve `enterprise-ai` para el mismo par candidato-vacante, y eso es intencional. Este servicio pondera crecimiento profesional, aspiraciones del candidato y objetivos declarados. No reutilizar ni comparar con la lógica de scoring de `enterprise-ai`. Ver sección 5 de `ARQUITECTURA_INTEGRACION.md` para el detalle completo.
+
 ---
 
 ## Convenciones de código y arquitectura
